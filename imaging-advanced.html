@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced 3D/4D Imaging: Standards, Strategies, Methods — Study Page</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;line-height:1.6;max-width:900px;margin:0 auto;padding:24px;color:#111;background:#fff}
+h1{font-size:1.7em} h2{margin-top:2em;border-top:2px solid #111;padding-top:.4em}
+.note{background:#fff8cc;border:1px solid #d4b800;padding:12px}
+.card{border:1px solid #ccc;padding:16px;margin:16px 0}
+table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px;text-align:left}
+.bar{background:#e9ecef;height:22px;margin:6px 0}.fill{height:22px;background:#2a9d8f}
+svg{max-width:100%;height:auto;display:block}
+footer{margin-top:3em;font-size:.9em;color:#555}
+</style>
+</head>
+<body>
+<h1>Advanced 3D/4D Imaging: Standards, Strategies, Methods</h1>
+<p><strong>Answer first:</strong> the advanced work is not a prettier splat. It is making splats <em>small, streamable, standard, and light-aware</em> — compress them, stream only the detail the camera needs, store them in a format other tools can read, and let light and shadows behave instead of baking one frozen look.</p>
+<div class="note"><strong>Study illustration only.</strong> The bars and diagrams below are drawings that explain the ideas, with sizes and percentages as reported by the formats' maintainers and by standards bodies — not measurements made on this page. No real splat file is loaded here, no WebGPU viewer runs here, and nothing here changes the Blogger vetoes: a live splat viewer is still a heavy runtime before first paint on a referral post.</div>
+
+<h2>1. Strategy: shrink the file before you stream it</h2>
+<p>Raw capture is not web-ready. The original PLY output stores roughly 62 float32 values per Gaussian — about 232–248 bytes each — so a million splats is roughly a quarter of a gigabyte uncompressed. The advanced pipeline, in order, is: prune, quantize, compress, tier.</p>
+<div class="card">
+<p><strong>Compression ladder (relative size, maintainer-reported, not to scale in the browser):</strong></p>
+<p>Raw PLY — baseline, ~232 bytes per splat</p><div class="bar"><div class="fill" style="width:100%"></div></div>
+<p>Prune near-transparent splats (often 30–50% of a trained scene) + quantize spherical harmonics — 5–10x smaller, reported</p><div class="bar"><div class="fill" style="width:18%"></div></div>
+<p>SPZ (Niantic, MIT, quantization + gzip) — up to ~90% smaller than PLY, reported; SPZ v4 to ~10x, and to ~18x at 3-bit spherical harmonics, per its format guide</p><div class="bar"><div class="fill" style="width:10%"></div></div>
+<p>SOG / SOGS — 15–20x smaller than PLY, per their maintainers, and fast to decode in browsers</p><div class="bar"><div class="fill" style="width:6%"></div></div>
+<p>Rule that follows: archive the PLY, deliver the compressed file. Never ship raw PLY to a web page.</p>
+</div>
+
+<h2>2. Strategy: stream detail by distance (LOD)</h2>
+<p>Level of detail means the camera only downloads what its pixels can show: dense splats near the camera, coarse splats far away. Hierarchical 3DGS splits a large scene into chunks at different detail levels (one production guide reports 30–40% lower peak VRAM for large outdoor scenes by loading only the relevant chunks). Cesium's 3D Tiles route does the same job with a spatial index, so a city-scale splat set can stream from sub-centimetre detail down to a whole district without loading everything at once.</p>
+<svg viewBox="0 0 600 150" role="img" aria-label="Diagram of many dots near the camera and few dots far away">
+<text x="10" y="20" font-size="14">Near the camera: dense. Far away: coarse. Same scene, less data.</text>
+<g fill="#2a9d8f"><circle cx="60" cy="90" r="7"/><circle cx="85" cy="75" r="6"/><circle cx="80" cy="110" r="6"/><circle cx="105" cy="90" r="7"/><circle cx="125" cy="105" r="5"/></g>
+<g fill="#e9c46a"><circle cx="280" cy="90" r="5"/><circle cx="310" cy="100" r="4"/><circle cx="295" cy="75" r="4"/></g>
+<g fill="#e76f51"><circle cx="480" cy="90" r="4"/><circle cx="520" cy="95" r="3"/></g>
+<text x="10" y="140" font-size="13">Progressive loading (e.g. LapisGS layers) and MPEG adaptive streaming for dynamic splats follow the same idea: send a coarse layer first, refine it, and offer representations per bitrate, detail level, and attribute subset.</text>
+</svg>
+
+<h2>3. Method: three rendering pipelines, and what each buys</h2>
+<table>
+<tr><th>Pipeline</th><th>How it works</th><th>What it buys / costs</th></tr>
+<tr><td>3DGS rasterization (EWA splatting)</td><td>Project Gaussians to 2D, blend in depth-sorted order, tile by tile.</td><td>Fastest, real-time. Pinhole cameras only; no secondary rays.</td></tr>
+<tr><td>3DGRT (ray tracing)</td><td>Trace rays against Gaussians (proxy meshes + BVH), evaluate at maximum response along the ray.</td><td>Complex cameras, reflections, refractions. Higher memory and cost.</td></tr>
+<tr><td>3DGUT (Unscented Transform, NVIDIA, CVPR 2025)</td><td>Replace the EWA linearisation with sigma points projected exactly under any nonlinear projection.</td><td>Fisheye and rolling-shutter cameras without a per-camera Jacobian, at rasterization speed; plus a hybrid form that traces secondary rays for reflections and refractions. One comparison reports beating a dedicated fisheye method with fewer than half the particles.</td></tr>
+</table>
+<p>The method to remember: 3DGUT does not make splats "better looking" in general. It removes a specific limitation — the pinhole assumption — and aligns rasterization with ray tracing so secondary effects become possible in the same representation.</p>
+
+<h2>4. Method: hybrid scenes and relighting</h2>
+<p>A splat alone cannot be touched, collided with, or relit. The advanced practice is hybrid:</p>
+<ul>
+<li><strong>Splats for look, mesh for touch:</strong> photoreal splats as the background, invisible simple mesh shapes for floors, walls, and collision. A splat gives no clean surface to stand on.</li>
+<li><strong>Proxy meshes for light:</strong> extract or supply a mesh, predict density, normals, and material parameters, then relight the radiance field with an HDR environment map and composite mesh objects into it — or radiance fields into a mesh scene — with soft shadows and glossy interreflections at real-time rates (ISMAR 2025 work).</li>
+<li><strong>Spherical harmonics are the view-dependent trick:</strong> they store how colour changes with viewing angle, which is why a splat scene can show specular highlights a flat mesh cannot easily fake. Quantizing them is the main compression lever — and the main quality risk.</li>
+</ul>
+<svg viewBox="0 0 600 130" role="img" aria-label="Diagram of a splat layer over a mesh layer">
+<rect x="40" y="80" width="520" height="28" fill="#457b9d" opacity="0.5"/><text x="50" y="99" font-size="13">Mesh layer — collision, shadows, touch (invisible where it matters)</text>
+<g opacity="0.8"><ellipse cx="120" cy="55" rx="30" ry="18" fill="#7fb069"/><ellipse cx="180" cy="45" rx="26" ry="20" fill="#e9c46a"/><ellipse cx="240" cy="55" rx="30" ry="18" fill="#f4a261"/><ellipse cx="300" cy="45" rx="26" ry="20" fill="#2a9d8f"/></g>
+<text x="50" y="30" font-size="13">Splat layer — photoreal look, view-dependent colour</text>
+</svg>
+
+<h2>5. Standards: from ad-hoc files to interchange formats</h2>
+<table>
+<tr><th>Standard</th><th>Status as reported</th><th>What it fixes</th></tr>
+<tr><td>KHR_gaussian_splatting (Khronos, glTF 2.0)</td><td>Release candidate, February 2026; ratification expected mid-2026 in several guides. Baseline is deliberately uncompressed and GPU-ready.</td><td>One cross-platform layout for position, orientation, scale, colour (spherical harmonics), and opacity, stored as point primitives — with graceful fallback to a sparse point cloud in viewers that cannot draw splats.</td></tr>
+<tr><td>KHR_gaussian_splatting_compression_spz (companion, proposed)</td><td>Proposed, not yet the baseline.</td><td>SPZ blobs inside glTF primitives, decompressed into attributes or passed straight to a renderer; spherical harmonics from none to three degrees by content need.</td></tr>
+<tr><td>OpenUSD Particle Fields (26.03, March 2026)</td><td>Native schema reported (ParticleField3DGaussianSplat / UsdVolParticleField).</td><td>Splats coexist with meshes, point clouds, and volumes in one scene graph, for VFX, simulation, and robotics pipelines.</td></tr>
+<tr><td>MPEG Gaussian Splat Coding (GSC)</td><td>Exploration, use cases approved through the 155th MPEG meeting (July 2026), including a single-file static asset with cover image and a dynamic track delivered by HTTP adaptive streaming with a pre-rendered fallback.</td><td>Interoperable compression and streaming, including a legacy fallback — the same fallback principle as the glTF point-cloud fallback.</td></tr>
+<tr><td>3D Tiles 2.0 (OGC community standard, proposed)</td><td>Splats proposed for inclusion.</td><td>Spatial indexing + LOD streaming for geospatial-scale splat sets.</td></tr>
+</table>
+<p>Notice the pattern across all five: every standard keeps a fallback for a viewer that cannot draw splats — a point cloud, a cover image, a pre-rendered video. That is the same discipline as the playbook's rendered-still fallback, at industry scale.</p>
+
+<h2>6. Advanced practice checklist</h2>
+<ol>
+<li>Archive PLY. Deliver SPZ or SOG/SOGS. Never ship raw PLY to the web.</li>
+<li>Prune near-transparent Gaussians and quantize spherical harmonics before compressing; check the specular highlights after, not just the file size.</li>
+<li>Tier by distance and stream progressively; send coarse first, refine after.</li>
+<li>Use a mesh where touch, collision, or shadows are needed; use splats where photoreal look is needed; do not ask either to do the other's job.</li>
+<li>Choose the pipeline by camera and light, not by fashion: raster for pinhole, 3DGUT for fisheye/rolling shutter, hybrid ray tracing only where reflections or refractions are the point.</li>
+<li>Target the standard format (glTF KHR, then USD) for interchange, and re-check ratification status before depending on a wire format — several of these were release candidates, not ratified, at the time of writing.</li>
+</ol>
+
+<h2>7. What this means for a blogger</h2>
+<p>Almost nothing changes on a money post — and that is the point. A compressed, streamed, standard splat is still a runtime, a download, and a GPU job placed where the answer should be. The advanced practices make splats viable for VFX, geospatial, robotics, and product viewers. For a text-first referral post, the correct application of all of this is still a rendered still as a sized WebP hero, with the splat work living in the study sandbox. The checklist above is how to judge a splat demo, not a reason to ship one.</p>
+<p><a href="./imaging-4d-3d.html">Back to the 4D and 3D imaging illustration</a> · <a href="./">Back to the curriculum test page</a></p>
+<footer>
+<p>Sources consulted: Cesium 3D Tiles / glTF splat material, Khronos glTF splat announcements, OpenUSD 26.03 splat material, NVIDIA 3DGUT, ISMAR 2025 relighting work, MPEG Gaussian Splat Coding meeting reports, and 2026 splat format/compression guides. Sizes, percentages, frame rates, and statuses are those sources' reported or maintainer claims, not measurements made on this page, and ratification statuses should be re-checked before production use.</p>
+<p>Study page only. Not a blog post, not a product claim, and not a change to any Blogger blog.</p>
+</footer>
+</body>
+</html>
