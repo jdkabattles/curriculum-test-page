@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4D and 3D Imaging, Illustrated — Study Page (NOT a live blog post)</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;line-height:1.6;max-width:900px;margin:0 auto;padding:24px;color:#111;background:#fff}
+h1{font-size:1.7em} h2{margin-top:2em;border-top:2px solid #111;padding-top:.4em}
+.note{background:#fff8cc;border:1px solid #d4b800;padding:12px}
+.card{border:1px solid #ccc;padding:16px;margin:16px 0}
+svg{max-width:100%;height:auto;display:block}
+table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px;text-align:left}
+.cube-scene{perspective:600px;height:180px;display:flex;align-items:center;justify-content:center}
+.cube{width:110px;height:110px;position:relative;transform-style:preserve-3d;animation:spin 12s linear infinite}
+.cube div{position:absolute;width:110px;height:110px;border:2px solid #111;opacity:.85}
+.f{background:#7fb069;transform:translateZ(55px)} .b{background:#f4a261;transform:rotateY(180deg) translateZ(55px)}
+.r{background:#e9c46a;transform:rotateY(90deg) translateZ(55px)} .l{background:#2a9d8f;transform:rotateY(-90deg) translateZ(55px)}
+.t{background:#e76f51;transform:rotateX(90deg) translateZ(55px)} .bo{background:#457b9d;transform:rotateX(-90deg) translateZ(55px)}
+@keyframes spin{from{transform:rotateX(-18deg) rotateY(0)}to{transform:rotateX(-18deg) rotateY(360deg)}}
+@media (prefers-reduced-motion:reduce){.cube{animation:none;transform:rotateX(-18deg) rotateY(35deg)}}
+footer{margin-top:3em;font-size:.9em;color:#555}
+</style>
+</head>
+<body>
+<h1>4D and 3D Imaging, Illustrated</h1>
+<p><strong>Answer first:</strong> 3D imaging rebuilds a still scene you can walk around in. 4D imaging is that same scene <em>plus time</em> — the scene itself moves, so you can walk around inside a moving moment.</p>
+<div class="note"><strong>Study illustration only — read this first.</strong> The diagrams below are drawings that explain the ideas. This page does <em>not</em> load a real Gaussian splat file, does not run a WebGPU splat viewer, and is not a photorealistic render. It is a curriculum study page on GitHub Pages, not a blog post, and it changes nothing about the Blogger vetoes: no live 3D hero, no autoplay video-loop hero, and no parallax hero on a referral post.</div>
+
+<h2>1. What a "splat" is</h2>
+<p>3D Gaussian Splatting (SIGGRAPH 2023, Kerbl and colleagues) does not build a scene from polygons. It rebuilds it from hundreds of thousands to millions of small, soft, coloured ellipsoids — Gaussians — each with a position, a shape, a colour, and a transparency. Projected and blended in depth order, they look near-photographic and render in real time.</p>
+<svg viewBox="0 0 600 170" role="img" aria-label="Diagram of coloured ellipses forming a rough sphere shape">
+<text x="10" y="20" font-size="14">Many soft ellipses, blended together, read as one solid scene:</text>
+<g opacity="0.75">
+<ellipse cx="150" cy="100" rx="55" ry="38" fill="#7fb069"/><ellipse cx="210" cy="80" rx="48" ry="42" fill="#e9c46a"/><ellipse cx="180" cy="125" rx="50" ry="32" fill="#2a9d8f"/><ellipse cx="250" cy="110" rx="42" ry="36" fill="#f4a261"/><ellipse cx="120" cy="125" rx="38" ry="28" fill="#457b9d"/>
+</g>
+<text x="340" y="90" font-size="15">one Gaussian =</text>
+<text x="340" y="112" font-size="15">position + shape +</text>
+<text x="340" y="134" font-size="15">colour + transparency</text>
+</svg>
+
+<h2>2. From 3D to 4D: add time</h2>
+<p>4D Gaussian Splatting adds a time axis. The splats themselves move and deform from frame to frame, instead of the camera merely moving around a frozen scene. That is what makes free-viewpoint video possible: a recorded performance you can orbit while it plays.</p>
+<svg viewBox="0 0 600 180" role="img" aria-label="Three frames showing splats moving over time">
+<text x="10" y="20" font-size="14">Same splats, three moments in time — the scene moves, not just the camera:</text>
+<g><text x="60" y="50" font-size="13">t = 0</text><ellipse cx="90" cy="110" rx="34" ry="24" fill="#e76f51"/><ellipse cx="130" cy="95" rx="28" ry="22" fill="#2a9d8f"/></g>
+<g><text x="260" y="50" font-size="13">t = 1</text><ellipse cx="285" cy="105" rx="34" ry="24" fill="#e76f51"/><ellipse cx="325" cy="110" rx="28" ry="22" fill="#2a9d8f"/></g>
+<g><text x="460" y="50" font-size="13">t = 2</text><ellipse cx="480" cy="95" rx="34" ry="24" fill="#e76f51"/><ellipse cx="520" cy="120" rx="28" ry="22" fill="#2a9d8f"/></g>
+<text x="10" y="165" font-size="13">Two design families: per-frame Gaussians (explicit, heavy) vs. a deformation field that warps one canonical set (thin, but struggles with fast or complex motion).</text>
+</svg>
+<p>Newer work tries to fix the weak spots of each family: FreeTimeGS (CVPR 2025 lineage) lets Gaussians appear at arbitrary times and places with their own motion function, instead of warping one canonical scene; Instant4D (2025) rebuilds casual, uncalibrated video in minutes with grid pruning; EvoGS (December 2025) treats the scene as a continuous-time dynamical system, so motion can in principle be predicted beyond the observed frames. These are paper and vendor claims about their own benchmarks, not guarantees for any scene.</p>
+
+<h2>3. How 4D is captured: a rig, not a phone</h2>
+<p>The honest cost of 4D is capture, not rendering. Production capture uses synchronized multi-camera arrays — one reported NAB 2026 demo used about 60 cameras — with cameras assigned to regions of interest (a face gets more resolution than a background). A single moving phone plus a moving subject is still deeply under-constrained: the result may look plausible and be wrong.</p>
+<svg viewBox="0 0 600 200" role="img" aria-label="Diagram of cameras arranged in a circle around a subject">
+<circle cx="300" cy="100" r="10" fill="#e76f51"/><text x="285" y="75" font-size="13">subject</text>
+<circle cx="300" cy="25" r="12" fill="#111"/><circle cx="375" cy="100" r="12" fill="#111"/><circle cx="300" cy="175" r="12" fill="#111"/><circle cx="225" cy="100" r="12" fill="#111"/><circle cx="353" cy="47" r="12" fill="#111"/><circle cx="247" cy="153" r="12" fill="#111"/>
+<text x="10" y="195" font-size="13">Synchronized cameras around the subject. More cameras = better reconstruction, and a much bigger capture job.</text>
+</svg>
+
+<h2>4. What is new in 2025–2026</h2>
+<table>
+<tr><th>Practice</th><th>What changed</th><th>What it means for a blogger</th></tr>
+<tr><td>WebGPU splat viewers</td><td>Browser viewers (e.g. Visionary, 2025) sort splats on the GPU and run in the browser with a three.js plug-in, including 4DGS variants.</td><td>Study only. A viewer is still a heavy runtime before first paint on a money post.</td></tr>
+<tr><td>Standards</td><td>KHR_gaussian_splatting for glTF (release candidate, February 2026, per Khronos/SIGGRAPH Asia material) and OpenUSD support for splats.</td><td>Splats are becoming a portable format, not just a research file — but portability does not make them a good blog hero.</td></tr>
+<tr><td>Generated worlds</td><td>Text- or image-to-world tools that export splats, and single-image 3DGS generation (e.g. Apple's SHARP, December 2025, reported).</td><td>Generation is fast; verification is not. A generated scene still needs a human check before it illustrates a fact.</td></tr>
+<tr><td>Production VFX</td><td>Native splat support in compositing tools (Nuke 17.0, late 2025, reported) and volumetric advertising capture.</td><td>The professional home for splats is video and VFX, not a text-first referral post.</td></tr>
+<tr><td>Language + time</td><td>4-LEGS (Eurographics 2025) grounds language features in 4D splats, so a text query can localise an action in space <em>and</em> time.</td><td>Interesting for search, not a reason to put a moving scene above an answer.</td></tr>
+</table>
+
+<h2>5. A plain CSS cube, for scale</h2>
+<p>Below is the cheapest possible "3D" on a web page: a cube drawn with CSS transforms only, no JavaScript, no downloaded 3D library, no splat file. It spins with transform only and stands still for reduced-motion readers. Compare that cost with a real splat viewer — millions of primitives, GPU sorting, and a runtime — and the playbook's rule becomes obvious: a still WebP hero gives a money post the same visual information at a fraction of the cost.</p>
+<div class="cube-scene" aria-label="A rotating CSS cube illustration"><div class="cube"><div class="f"></div><div class="b"></div><div class="r"></div><div class="l"></div><div class="t"></div><div class="bo"></div></div></div>
+
+<h2>6. What to keep, what to drop</h2>
+<ul>
+<li><strong>Keep:</strong> splats as a mental model — scenes as soft points, time as a fourth axis, capture as the real cost.</li>
+<li><strong>Keep:</strong> the standards direction — glTF and OpenUSD support means study files will stay readable.</li>
+<li><strong>Drop:</strong> any plan to put a live splat viewer, a moving 4D scene, or a parallax depth effect above the answer on a referral post. The vetoes stand.</li>
+<li><strong>Drop:</strong> single-phone 4D capture as a production method in 2026 — treat it as experimental.</li>
+</ul>
+<p><a href="./">Back to the curriculum test page</a></p>
+<footer>
+<p>Sources consulted for this study page: 3D/4D Gaussian Splatting overviews and timelines, the FreeTimeGS / 4DV volumetric-video work, Instant4D, EvoGS, 4-LEGS, Khronos glTF splat material, and WebGPU viewer guides. Figures quoted from those sources (frame rates, PSNR, camera counts, file sizes) are their authors' or vendors' claims on their own benchmarks, not independent measurements on this site, and no splat file was rendered here.</p>
+<p>Study page only. Not a blog post, not a product claim, and not a change to any Blogger blog.</p>
+</footer>
+</body>
+</html>
